@@ -165,7 +165,7 @@ function Restore-FromFile([string]$file){
 function Write-Report([string]$title){
   Write-Host "`n==== $title ====" -ForegroundColor Cyan
   $table = foreach($n in $ProtocolNames){ Get-ProtocolState -name $n -scope "Both" }
-  $table | Sort-Object Protocol,Path | Format-Table Protocol, Path, Enabled, DisabledByDefault, Effective -AutoSize
+  $table | Sort-Object Protocol,Path | Select-Object Protocol, @{Name = 'Path'; Expression = {$_.Path -replace ".*SCHANNEL"}}, Enabled, DisabledByDefault, Effective | Format-Table -AutoSize
 }
 
 function Set-DotNetStrongCrypto {
