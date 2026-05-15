@@ -46,9 +46,9 @@
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
 param(
   [switch]$Secure,
-  [ValidateSet("SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1","TLS 1.2")]
+  [ValidateSet("SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1","TLS 1.2","TLS 1.3")]
   [string[]]$Enable,
-  [ValidateSet("SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1","TLS 1.2")]
+  [ValidateSet("SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1","TLS 1.2","TLS 1.3")]
   [string[]]$Disable,
   [ValidateSet("Server","Client","Both")]
   [string]$Scope = "Both",
@@ -70,7 +70,7 @@ function Test-Admin {
   }
 }
 
-$ProtocolNames = @("SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1","TLS 1.2")
+$ProtocolNames = @("SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1","TLS 1.2", "TLS 1.3")
 $Root = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols"
 
 function Get-ProtoKeyPaths([string]$name,[string]$scope){
@@ -93,7 +93,9 @@ function Get-ProtocolState([string]$name,[string]$scope){
     $dbd     = if ($prop -and ($prop.PSObject.Properties.Name -contains 'DisabledByDefault')) { [int]$prop.DisabledByDefault } else { $null }
 
     # Effective: null-safe
-    $effective = if ($enabled -eq 1 -and $dbd -eq 0) {
+    $effective = if (-not $TLS13Support -and $name -eq "TLS 1.3") {
+      'Unsupported'
+    } elseif ($enabled -eq 1 -and $dbd -eq 0) {
       'Enabled'
     } elseif ($enabled -eq 0 -and $dbd -eq 1) {
       'Disabled'
@@ -195,6 +197,15 @@ function Set-DotNetStrongCrypto {
 # ------------------ Main ------------------
 
 Test-Admin
+
+$WinVerInfo = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+Write-Host "Detected OS: $($WinVerInfo.ProductName); Build: $($WinVerInfo.CurrentBuildNumber)"
+
+if ([int]$WinVerInfo.CurrentBuildNumber -ge 20348) {
+  Write-Verbose "OS build 20348 (Server 2022) and greater supports TLS 1.3"
+  $TLS13Support = $True
+}
+
 Write-Report "Current SCHANNEL Protocol State"
 
 if ($ReportOnly) { return }
@@ -216,6 +227,9 @@ $toDisable = @()
 if ($Secure){
   $toDisable += "SSL 2.0","SSL 3.0","TLS 1.0","TLS 1.1"
   $toEnable  += "TLS 1.2"
+  if($TLS13Support) {
+    $toEnable  += "TLS 1.3"
+  }
 }
 
 if ($Enable){  $toEnable  += $Enable }
